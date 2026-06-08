@@ -1,0 +1,55 @@
+services:
+  # Base de datos transaccional
+  pet-db:
+    container_name: pet-db
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=petconnect
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=change_me_in_prod
+
+  # Motor principal (Django)
+  pet-app:
+    container_name: pet-app
+    build: .
+    # El comando sigue siendo interno para el backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=1
+      - DATABASE_URL=postgres://admin:change_me_in_prod@pet-db:5432/petconnect
+      - SECRET_KEY=dev-key-change-me-in-production
+    depends_on:
+      - pet-db
+
+  # Proxy Inverso (Nginx)
+  pet-web:
+    container_name: pet-web
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./static:/app/static
+      - ./media:/app/media
+    depends_on:
+      - pet-app # Nginx depende de que pet-app esté listo para redirigir tráfico
+
+  # Contenedor para Backups
+  pet-backup:
+    container_name: pet-backup
+    build: .
+    command: cron -f 
+    volumes:
+      - ./backups:/app/backups
+    depends_on:
+      - pet-db
+    environment:
+      - DB_HOST=pet-db
+
+volumes:
+  postgres_data:
